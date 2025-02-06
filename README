@@ -11,6 +11,7 @@ Particle Effects: The game features particle effects triggered by the player's j
 Level System: The game becomes more challenging as the player progresses through levels by scoring more points.
 Cloud Animation: Moving clouds enhance the atmosphere of the game.
 Game Over Screen: Displays when the player collides with an obstacle, and provides an option to restart or quit.
+
 Technologies Used
 ---------------------
 Python: The programming language used to develop the game.
