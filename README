@@ -1,0 +1,52 @@
+1. Modules Used:
+------------------
+pygame: This is the primary library used for game development. It is used for graphics rendering, handling user input (keyboard and mouse), playing sounds, and controlling the game loop.
+
+pygame.init():initializes the library.
+pygame.Rect(): is used to create rectangular objects for the player, obstacles, clouds, and other elements.
+pygame.draw: is used for drawing shapes such as rectangles, polygons (for player’s head), and circles (for particle effects).
+pygame.font.SysFont(): is used to create fonts for displaying text like the score and game messages.
+pygame.display.set_mode(): and pygame.display.set_caption() are used to set up the game window and title.
+random: This module is used to generate random values for obstacle positions, cloud positions, and cloud reappearing locations.
+
+cv2 (OpenCV): This module is used to capture video from the webcam, process the frames, and detect hand gestures in real-time.
+
+cv2.VideoCapture(0) is used to initialize the webcam and capture video frames.
+cv2.resize() and cv2.cvtColor() are used for resizing and converting the captured frames to a format suitable for processing.
+mediapipe: This is a Google library used for detecting and tracking human hands and landmarks. It is used here to detect hand gestures, specifically to detect if the hand is open (triggering the player's jump).
+
+mp.solutions.hands is used to set up hand landmark detection.
+hands.process(rgb_frame) processes the current video frame and detects the hand landmarks.
+The distance between the thumb and pinky is calculated to detect whether the hand is open.
+2. Game Description:
+----------------------
+Gameplay: The game is a side-scrolling runner where the player controls a character that can move left or right and jump. The player avoids obstacles and gains points as they survive longer.
+
+The player’s movement is controlled by the arrow keys, and jumping is controlled through hand gestures detected via the webcam.
+If the hand is open (determined by the distance between the thumb and pinky), the player jumps. The jump is simulated with gravity pulling the player down after a short time.
+Obstacles appear from the right side of the screen and move toward the left. If the player collides with an obstacle, the game ends.
+Game Features:
+
+Score & Leveling: The score increases as the player avoids obstacles, and the game becomes progressively harder as the player scores more points. The difficulty is increased by adding more obstacles and increasing their speed.
+Particle Effects: When the player jumps, small particles are emitted from the player’s position as a visual effect.
+Clouds: Moving clouds are drawn in the background to add more visual appeal. These clouds move from right to left and reset their positions once they go off-screen.
+Paused State: The game can be paused when two hands are detected in the webcam feed, and it resumes when only one hand is visible.
+Splash Screen and Start Button: Before the game starts, a splash screen appears with the game title. After that, a "Start Game" button is drawn on the screen, and the game begins once the button is clicked.
+
+Game Over: If the player collides with an obstacle, the game ends, and a Game Over screen is displayed with the option to restart or quit.
+
+3. Core Game Functions:
+------------------------------
+splash_screen(): Displays the game's title with a fade-in animation.
+draw_start_button(): Displays a "Start Game" button and checks if the player clicks it to start the game.
+game_loop(): The main game loop where the player controls the character, obstacles move, particles are updated, and all elements are drawn on the screen.
+game_over_screen(): Displays the game over screen and waits for the player to either restart the game or quit.
+4. Hand Gesture Control:
+--------------------------------
+The game uses hand gestures to control the player's jump. The mediapipe library tracks the hand landmarks, and the distance between the thumb and pinky is used to detect an open hand, triggering the jump when the hand is open.
+The game also pauses when two hands are detected and resumes when only one hand is detected.
+5. Other Features:
+----------------------
+Animation: The player's walking animation alternates between two frames to simulate walking.
+Particle Effects: Particles are emitted when the player jumps, creating a visual effect as the player moves.
+Dynamic Difficulty: As the player scores more points, the game becomes harder by increasing the obstacle speed and adding more obstacles.
