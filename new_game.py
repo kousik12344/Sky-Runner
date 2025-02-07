@@ -4,6 +4,7 @@ import cv2
 import mediapipe as mp
 import threading
 import os
+import numpy as np
 
 # Initialize pygame
 pygame.init()
@@ -122,9 +123,9 @@ def draw_active_powerups():
 # Initialize MediaPipe Hand Tracking
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
-    min_detection_confidence=0.7,
-    min_tracking_confidence=0.5,
-    max_num_hands=2  # Allow detection of two hands
+    min_detection_confidence=0.8,  # Increase for better detection accuracy
+    min_tracking_confidence=0.8,   # Increase for better tracking accuracy
+    max_num_hands=2
 )
 
 # OpenCV camera setup
@@ -138,7 +139,7 @@ def hand_detection_thread():
         ret, frame = cap.read()
         if not ret:
             break
-        frame = cv2.resize(frame, (320, 240))  # Reduce resolution
+        frame = cv2.resize(frame, (320, 240))  # Reduce resolution for faster processing
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hands.process(rgb_frame)
 
@@ -150,6 +151,15 @@ def spawn_powerup():
     powerup_type = random.choice(POWERUP_TYPES)
     powerup = pygame.Rect(random.randint(500, 700), GROUND_HEIGHT - 50, POWERUP_SIZE, POWERUP_SIZE)
     powerups.append((powerup, powerup_type))
+
+landmark_buffer = []
+
+def smooth_landmarks(landmarks, buffer_size=5):
+    global landmark_buffer
+    landmark_buffer.append(landmarks)
+    if len(landmark_buffer) > buffer_size:
+        landmark_buffer.pop(0)
+    return np.mean(landmark_buffer, axis=0)
 
 # Function to apply power-ups
 def apply_powerup(powerup_type):
@@ -250,7 +260,68 @@ def game_over_screen():
 
         pygame.display.update()
 
-# Splash screen with fade-in animation
+# Instruction Screen with Play Button
+def instruction_screen():
+    font_large = pygame.font.SysFont(None, 72)
+    font_small = pygame.font.SysFont(None, 24)
+
+    # Button properties (Moved to the right side)
+    card_width, card_height = 200, 80
+    card_rect = pygame.Rect(WIDTH - card_width - 50, HEIGHT - 100, card_width, card_height)
+    card_color = WHITE
+    text_color = BLACK
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_pos = pygame.mouse.get_pos()
+                if card_rect.collidepoint(mouse_pos):
+                    game_loop()  # Start the game directly
+                    return
+
+        # Draw the instruction screen
+        screen.fill(SKY_BLUE)
+
+        # Draw the title
+        title_text = font_large.render("Instructions", True, BLACK)
+        screen.blit(title_text, (WIDTH // 2 - title_text.get_width() // 2, 20))
+
+        # Instructions
+        instructions = [
+            "1. Use an open hand gesture to jump.",
+            "2. Avoid obstacles to keep running.",
+            "3. Collect power-ups for special abilities:",
+            "   - Shield: Protects you from one obstacle ('dark blue square').",
+            "   - Speed Boost: Increases your speed ('light green square').",
+            "   - Double Points: Doubles your score ('orange square').",
+            "4. Pause the game by showing two hands.",
+            "5. Resume the game by making a fist.",
+            "6. Reach the highest score possible!"
+        ]
+
+        for i, line in enumerate(instructions):
+            instruction_text = font_small.render(line, True, BLACK)
+            screen.blit(instruction_text, (50, 100 + i * 30))
+
+        # Draw the "Play" button with shadow
+        shadow_rect = card_rect.move(5, 5)
+        pygame.draw.rect(screen, (0, 0, 0, 100), shadow_rect, border_radius=10)
+        pygame.draw.rect(screen, card_color, card_rect, border_radius=10)
+        pygame.draw.rect(screen, BLACK, card_rect, 2, border_radius=10)
+
+        # Draw the text on the button
+        font_medium = pygame.font.SysFont(None, 48)
+        text_surface = font_medium.render("Play", True, text_color)
+        text_rect = text_surface.get_rect(center=card_rect.center)
+        screen.blit(text_surface, text_rect)
+
+        pygame.display.update()
+
+
+# Update the splash screen to transition to the instruction screen
 def splash_screen():
     font_large = pygame.font.SysFont(None, 72)
     title_text = font_large.render("Sky Runner", True, WHITE)
@@ -276,45 +347,34 @@ def splash_screen():
         pygame.display.update()
         pygame.time.delay(30)  # Control the speed of the fade-in
 
-    # Wait for a moment before transitioning to the start screen
+    # Wait for a moment before transitioning to the instruction screen
     pygame.time.delay(1000)
+    instruction_screen()  # Transition to the instruction screen
 
-# Start screen with a card-like button
-def start_screen():
-    font_medium = pygame.font.SysFont(None, 48)
+def is_fist(landmarks):
+    thumb_tip = landmarks[mp_hands.HandLandmark.THUMB_TIP]
+    index_tip = landmarks[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+    middle_tip = landmarks[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+    ring_tip = landmarks[mp_hands.HandLandmark.RING_FINGER_TIP]
+    pinky_tip = landmarks[mp_hands.HandLandmark.PINKY_TIP]
 
-    # Card button properties
-    card_width, card_height = 200, 80  # Decreased card height
-    card_rect = pygame.Rect(WIDTH // 2 - card_width // 2, HEIGHT // 2 - card_height // 2, card_width, card_height)
-    card_color = WHITE  # Card color is white
-    text_color = BLACK  # Text color is black
+    # Check if thumb is close to index and other fingers are folded
+    thumb_index_distance = ((thumb_tip.x - index_tip.x) ** 2 + (thumb_tip.y - index_tip.y) ** 2) ** 0.5
+    fingers_folded = (
+        middle_tip.y > landmarks[mp_hands.HandLandmark.MIDDLE_FINGER_PIP].y and
+        ring_tip.y > landmarks[mp_hands.HandLandmark.RING_FINGER_PIP].y and
+        pinky_tip.y > landmarks[mp_hands.HandLandmark.PINKY_PIP].y
+    )
+    return thumb_index_distance < 0.1 and fingers_folded
 
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                return
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                mouse_pos = pygame.mouse.get_pos()
-                if card_rect.collidepoint(mouse_pos):  # Check if the card is clicked
-                    game_loop()
-                    return
-
-        # Draw the start screen
-        screen.fill(SKY_BLUE)
-
-        # Draw the card-like button with shadow
-        shadow_rect = card_rect.move(5, 5)  # Offset for shadow
-        pygame.draw.rect(screen, (0, 0, 0, 100), shadow_rect, border_radius=10)  # Shadow
-        pygame.draw.rect(screen, card_color, card_rect, border_radius=10)  # Card
-        pygame.draw.rect(screen, BLACK, card_rect, 2, border_radius=10)  # Card border
-
-        # Draw the text on the card
-        text_surface = font_medium.render("Start Game", True, text_color)
-        text_rect = text_surface.get_rect(center=card_rect.center)
-        screen.blit(text_surface, text_rect)
-
-        pygame.display.update()
+def is_open_hand(landmarks):
+    # Check if all fingers are extended
+    return (
+        landmarks[mp_hands.HandLandmark.INDEX_FINGER_TIP].y < landmarks[mp_hands.HandLandmark.INDEX_FINGER_PIP].y and
+        landmarks[mp_hands.HandLandmark.MIDDLE_FINGER_TIP].y < landmarks[mp_hands.HandLandmark.MIDDLE_FINGER_PIP].y and
+        landmarks[mp_hands.HandLandmark.RING_FINGER_TIP].y < landmarks[mp_hands.HandLandmark.RING_FINGER_PIP].y and
+        landmarks[mp_hands.HandLandmark.PINKY_TIP].y < landmarks[mp_hands.HandLandmark.PINKY_PIP].y
+    )
 
 # Game loop
 def game_loop():
@@ -359,15 +419,11 @@ def game_loop():
         if results and results.multi_hand_landmarks:
             if len(results.multi_hand_landmarks) == 1:  # One hand detected
                 landmarks = results.multi_hand_landmarks[0].landmark
-                thumb_tip = landmarks[mp_hands.HandLandmark.THUMB_TIP]
-                index_tip = landmarks[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-                distance = ((thumb_tip.x - index_tip.x) ** 2 + (thumb_tip.y - index_tip.y) ** 2) ** 0.5
-
-                if distance < 0.1:  # Right fist detected
+                if is_fist(landmarks):  # Check if the hand is a fist
                     paused = False
 
         if paused:
-            # Display "Paused" text
+                # Display "Paused" text
             font_large = pygame.font.SysFont(None, 72)
             paused_text = font_large.render("Paused", True, BLACK)
             paused_rect = paused_text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
@@ -375,29 +431,25 @@ def game_loop():
             pygame.display.update()
             continue
 
-        # Hand gesture detection
+            # Hand gesture detection
         if results and results.multi_hand_landmarks:
             landmarks = results.multi_hand_landmarks[0].landmark
-            thumb_tip = landmarks[mp_hands.HandLandmark.THUMB_TIP]
-            index_tip = landmarks[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-            distance = ((thumb_tip.x - index_tip.x) ** 2 + (thumb_tip.y - index_tip.y) ** 2) ** 0.5
-
-            if distance > 0.1 and not is_jumping:  # Open right hand detected
+            if is_open_hand(landmarks) and not is_jumping:  # Open hand detected
                 velocity_y = jump_power
                 is_jumping = True
                 add_particles()
 
-        # Apply gravity
+            # Apply gravity
         velocity_y += gravity
         player.y += velocity_y
 
-        # Collision with ground
+            # Collision with ground
         if player.y >= GROUND_HEIGHT - player.height:
             player.y = GROUND_HEIGHT - player.height
             velocity_y = 0
             is_jumping = False
 
-        # Move obstacles
+            # Move obstacles
         for obs in obstacles:
             obs.x -= obstacle_speed
             if obs.x < -30:
@@ -406,7 +458,7 @@ def game_loop():
                 if double_points:
                     score += 1  # Add +1 for double points
 
-        # Check collision with obstacles
+            # Check collision with obstacles
         for obs in obstacles:
             if player.colliderect(obs):
                 if shield:
@@ -415,11 +467,11 @@ def game_loop():
                     game_over_screen()
                     return
 
-        # Spawn power-ups
+            # Spawn power-ups
         if random.randint(1, 100) == 1:  # 1% chance to spawn a power-up
             spawn_powerup()
 
-        # Check collision with power-ups
+            # Check collision with power-ups
         for powerup, powerup_type in powerups[:]:
             powerup.x -= obstacle_speed
             if player.colliderect(powerup):
@@ -428,53 +480,53 @@ def game_loop():
             elif powerup.x < -POWERUP_SIZE:
                 powerups.remove((powerup, powerup_type))
 
-        # Update power-up durations
+            # Update power-up durations
         update_powerups()
 
-        # Apply power-up effects
+            # Apply power-up effects
         if speed_boost:
             obstacle_speed = 10  # Increase obstacle speed
         else:
             obstacle_speed = 5  # Reset obstacle speed
 
-        # Update particles
+            # Update particles
         update_particles()
 
-        # Increase level and difficulty
+            # Increase level and difficulty
         if score % 10 == 0 and level < score // 10 + 1:
             level += 1
             obstacle_speed += 1
             obstacles.append(pygame.Rect(random.randint(500, 700), GROUND_HEIGHT - 30, 30, 30))
 
-        # Move clouds
+            # Move clouds
         for cloud in clouds:
             cloud.x -= 2
             if cloud.x < -CLOUD_WIDTH:
                 cloud.x = random.randint(WIDTH, WIDTH + 200)
                 cloud.y = random.randint(50, 150)
 
-        # Update animation frame
+            # Update animation frame
         frame_counter += 1
         if frame_counter >= frame_delay:
             frame_counter = 0
             current_frame = (current_frame + 1) % animation_frames
 
-        # Drawing
+            # Drawing
         screen.fill(SKY_BLUE)  # Draw sky background
         pygame.draw.rect(screen, GROUND_GREEN, (0, GROUND_HEIGHT, WIDTH, HEIGHT - GROUND_HEIGHT))  # Draw ground
 
-        # Draw clouds
+            # Draw clouds
         for cloud in clouds:
             pygame.draw.ellipse(screen, WHITE, cloud)
 
-        # Draw player with walking animation
+            # Draw player with walking animation
         draw_player(player.x, player.y, current_frame)
 
-        # Draw obstacles
+            # Draw obstacles
         for obs in obstacles:
             pygame.draw.rect(screen, BLACK, obs)
 
-        # Draw power-ups
+            # Draw power-ups
         for powerup, powerup_type in powerups:
             color = {
                 "shield": (0, 0, 255),
@@ -483,13 +535,13 @@ def game_loop():
             }[powerup_type]
             pygame.draw.rect(screen, color, powerup)
 
-        # Draw score and level
+            # Draw score and level
         draw_score_and_level()
 
-        # Draw active power-ups
+            # Draw active power-ups
         draw_active_powerups()
 
-        # Draw particles
+            # Draw particles
         for particle in particles:
             pygame.draw.circle(screen, BLACK, (int(particle[0][0]), int(particle[0][1])), 3)
 
@@ -498,6 +550,7 @@ def game_loop():
     cap.release()
     pygame.quit()
 
-# Start the game with the splash screen
+        # Start the game with the splash screen
 splash_screen()
-start_screen()
+# Run the instruction screen first
+instruction_screen()
